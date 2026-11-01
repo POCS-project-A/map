@@ -2,11 +2,11 @@ name: CI/CD - Build, push to OCIR and deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main,  feauture/CICD]
 
 env:
   COMPOSE_FILE: docker-compose.yml
-  IMAGE_NAME: ${{ secrets.OCIR_IMAGE }}
+  IMAGE_NAME: ${{ secrets.OCIR_REGISTRY }}/${{ secrets.OCIR_NAMESPACE }}/map-web
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
