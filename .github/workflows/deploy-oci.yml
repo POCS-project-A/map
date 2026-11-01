@@ -2,7 +2,7 @@ name: CI/CD - Build, push to OCIR and deploy
 
 on:
   push:
-    branches: [ main,  feauture/CICD]
+    branches: [ main ]
 
 env:
   COMPOSE_FILE: docker-compose.yml
