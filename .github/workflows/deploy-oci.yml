@@ -1,0 +1,75 @@
+name: CI/CD - Build, push to OCIR and deploy
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  COMPOSE_FILE: docker-compose.yml
+  IMAGE_NAME: ${{ secrets.OCIR_REGISTRY }}/${{ secrets.OCIR_NAMESPACE }}/map-web
+  IMAGE_TAG: ${{ github.sha }}
+  
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to OCIR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.OCIR_REGISTRY }}
+          username: ${{ secrets.OCIR_USERNAME }}
+          password: ${{ secrets.OCIR_PASSWORD }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Compose file
+        run: |
+          test -s "$COMPOSE_FILE"
+          docker compose -f "$COMPOSE_FILE" config --quiet
+
+      - name: Build and push Compose services
+        run: docker compose -f "$COMPOSE_FILE" build --push
+
+      - name: Copy Compose file to remote host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: ${{ env.COMPOSE_FILE }}
+          target: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Deploy on remote host (pull & restart)
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: COMPOSE_FILE,IMAGE_NAME,IMAGE_TAG,OCIR_REGISTRY,OCIR_USERNAME,OCIR_PASSWORD
+          script: |
+            set -e
+            printf '%s' "$OCIR_PASSWORD" | docker login "$OCIR_REGISTRY" -u "$OCIR_USERNAME" --password-stdin
+            mkdir -p "${{ secrets.DEPLOY_PATH }}"
+            cat > "${{ secrets.DEPLOY_PATH }}/.env" <<'EOF'
+            IMAGE_NAME=$IMAGE_NAME
+            IMAGE_TAG=$IMAGE_TAG
+            EOF
+            cd "${{ secrets.DEPLOY_PATH }}"
+            docker compose -f "$COMPOSE_FILE" pull
+            docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
+        env:
+          COMPOSE_FILE: ${{ env.COMPOSE_FILE }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          OCIR_REGISTRY: ${{ secrets.OCIR_REGISTRY }}
+          OCIR_USERNAME: ${{ secrets.OCIR_USERNAME }}
+          OCIR_PASSWORD: ${{ secrets.OCIR_PASSWORD }}
