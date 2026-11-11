@@ -1,0 +1,43 @@
+# CodeRabbit 리뷰 결과를 한국어로 표시합니다.
+language: "ko-KR"
+
+reviews:
+  # "chill"은 중요도가 높은 문제를 중심으로 리뷰합니다.
+  # 더 엄격한 리뷰가 필요하면 "assertive"로 변경할 수 있습니다.
+  profile: "chill"
+
+  # 리뷰 결과에 변경 사항의 전체 요약을 포함합니다.
+  high_level_summary: true
+
+  # 리뷰 결과를 시 형식으로 요약하지 않습니다.
+  poem: false
+
+  # CodeRabbit이 자동으로 PR에 변경 요청을 걸지 않도록 합니다.
+  request_changes_workflow: false
+
+  auto_review:
+    # PR이 생성되거나 업데이트될 때 자동으로 리뷰합니다.
+    enabled: true
+
+    # 작업 중인 Draft PR도 리뷰합니다.
+    drafts: false
+
+    # 새 커밋이 push될 때 변경된 부분을 다시 리뷰합니다.
+    auto_incremental_review: true
+
+  # 리뷰에서 제외할 파일 또는 디렉터리입니다.
+  path_filters:
+    - "!**/*.lock"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+
+
+chat:
+  # PR 댓글에서 CodeRabbit의 질문이나 요청에 자동으로 답변합니다.
+  auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    # 저장소의 코드 가이드라인을 리뷰에 반영합니다.
+    enabled: true
