@@ -19,11 +19,14 @@ reviews:
     # PR이 생성되거나 업데이트될 때 자동으로 리뷰합니다.
     enabled: true
 
-    # 작업 중인 Draft PR도 리뷰합니다.
+    # 작업 중인 Draft PR은 리뷰하지 않습니다.
     drafts: false
 
     # 새 커밋이 push될 때 변경된 부분을 다시 리뷰합니다.
     auto_incremental_review: true
+
+    # 리뷰한 커밋 수와 관계없이 자동 리뷰를 계속 실행합니다.
+    auto_pause_after_reviewed_commits: 0
 
   # 리뷰에서 제외할 파일 또는 디렉터리입니다.
   path_filters:
