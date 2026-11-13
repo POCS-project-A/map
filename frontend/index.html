@@ -1,12 +1,35 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="ko">
-  <head>
+<head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Map 웹 페이지</title>
-  </head>
-  <body>
-    <h1>HTML 페이지가 정상적으로 실행되었습니다.</h1>
-    <p>Nginx 컨테이너에서 제공하는 정적 페이지입니다.</p>
-  </body>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>여행지 검색</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/js/search.js" defer></script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>여행지 검색</h1>
+            <p>가고 싶은 여행지를 검색해 보세요!</p>
+        </header>
+
+        <section class="search-section">
+            <input
+                type="text"
+                class="search-input"
+                placeholder="여행지 이름을 입력하세요"
+            >
+            <button class="search-button">검색</button>
+        </section>
+
+        <section class="result-section">
+            <h2>검색 결과</h2>
+            <div id="search-result" class="result-box">
+                검색어를 입력하면 결과가 표시됩니다.
+            </div>
+        </section>
+    </main>
+</body>
 </html>
