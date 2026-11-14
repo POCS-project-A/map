@@ -25,5 +25,8 @@ services:
       dockerfile: Dockerfile
     container_name: map-api
     restart: unless-stopped
+    environment:
+      NAVER_SEARCH_CLIENT_ID: ${NAVER_SEARCH_CLIENT_ID:?검색 API Client ID가 필요합니다}
+      NAVER_SEARCH_CLIENT_SECRET: ${NAVER_SEARCH_CLIENT_SECRET:?검색 API Client Secret이 필요합니다}
     expose:
       - "8000"

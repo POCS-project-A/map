@@ -6,10 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>여행지 검색</title>
     <link rel="stylesheet" href="/style.css">
-    <script src="/js/search.js" defer></script>
+    <script src="/js/search.js?v=2" defer></script>
+    <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=wwwbprot7z" defer></script>
+    <script src="/js/map.js" defer></script>
 </head>
 <body>
-    <main class="container">
+    <div class="app-layout">
+    <aside class="sidebar">
         <header>
             <h1>여행지 검색</h1>
             <p>가고 싶은 여행지를 검색해 보세요!</p>
@@ -19,17 +22,27 @@
             <input
                 type="text"
                 class="search-input"
+                aria-label="여행지 이름"
                 placeholder="여행지 이름을 입력하세요"
             >
-            <button class="search-button">검색</button>
+            <button type="button" class="search-button">검색</button>
         </section>
 
         <section class="result-section">
             <h2>검색 결과</h2>
-            <div id="search-result" class="result-box">
+            <div
+                id="search-result"
+                class="result-box"
+                aria-live="polite"
+            >
                 검색어를 입력하면 결과가 표시됩니다.
             </div>
         </section>
+    </aside>
+
+    <main class="map-main" aria-label="여행지 지도">
+        <div id="map"></div>
     </main>
+</div>
 </body>
 </html>
