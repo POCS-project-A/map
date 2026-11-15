@@ -7,6 +7,7 @@ on:
 env:
   COMPOSE_FILE: docker-compose.yml
   IMAGE_NAME: ${{ secrets.OCIR_REGISTRY }}/${{ secrets.OCIR_NAMESPACE }}/map-web
+  API_IMAGE_NAME: ${{ secrets.OCIR_REGISTRY }}/${{ secrets.OCIR_NAMESPACE }}/map-api
   IMAGE_TAG: ${{ github.sha }}
   
 jobs:
@@ -44,7 +45,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: ${{ env.COMPOSE_FILE }}
+          source: "docker-compose.yml,nginx/default.conf"
           target: ${{ secrets.DEPLOY_PATH }}
 
       - name: Deploy on remote host (pull & restart)
@@ -54,16 +55,18 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: COMPOSE_FILE,IMAGE_NAME,IMAGE_TAG,OCIR_REGISTRY,OCIR_USERNAME,OCIR_PASSWORD
+          envs: COMPOSE_FILE,IMAGE_NAME,API_IMAGE_NAME,IMAGE_TAG,OCIR_REGISTRY,OCIR_USERNAME,OCIR_PASSWORD
           script: |
             set -e
             printf '%s' "$OCIR_PASSWORD" | docker login "$OCIR_REGISTRY" -u "$OCIR_USERNAME" --password-stdin
             mkdir -p "${{ secrets.DEPLOY_PATH }}"
             cat > "${{ secrets.DEPLOY_PATH }}/.env" <<'EOF'
             IMAGE_NAME=$IMAGE_NAME
+            API_IMAGE_NAME=$API_IMAGE_NAME
             IMAGE_TAG=$IMAGE_TAG
             EOF
             cd "${{ secrets.DEPLOY_PATH }}"
+            test -f nginx/default.conf
             docker compose -f "$COMPOSE_FILE" pull
             docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
         env:
@@ -73,3 +76,4 @@ jobs:
           OCIR_REGISTRY: ${{ secrets.OCIR_REGISTRY }}
           OCIR_USERNAME: ${{ secrets.OCIR_USERNAME }}
           OCIR_PASSWORD: ${{ secrets.OCIR_PASSWORD }}
+          API_IMAGE_NAME: ${{ env.API_IMAGE_NAME }}

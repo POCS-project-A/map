@@ -23,6 +23,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: ${API_IMAGE_NAME:?API_IMAGE_NAME is required}:${IMAGE_TAG:-latest}
     container_name: map-api
     restart: unless-stopped
     environment:
