@@ -58,16 +58,18 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: COMPOSE_FILE,IMAGE_NAME,API_IMAGE_NAME,IMAGE_TAG,OCIR_REGISTRY,OCIR_USERNAME,OCIR_PASSWORD
+          envs: COMPOSE_FILE,IMAGE_NAME,API_IMAGE_NAME,IMAGE_TAG,OCIR_REGISTRY,OCIR_USERNAME,OCIR_PASSWORD,NAVER_SEARCH_CLIENT_ID,NAVER_SEARCH_CLIENT_SECRET
           script: |
             set -e
             printf '%s' "$OCIR_PASSWORD" | docker login "$OCIR_REGISTRY" -u "$OCIR_USERNAME" --password-stdin
             mkdir -p "${{ secrets.DEPLOY_PATH }}"
-            cat > "${{ secrets.DEPLOY_PATH }}/.env" <<'EOF'
-            IMAGE_NAME=$IMAGE_NAME
-            API_IMAGE_NAME=$API_IMAGE_NAME
-            IMAGE_TAG=$IMAGE_TAG
-            EOF
+            umask 077
+            printf '%s\n' \
+              "IMAGE_NAME=$IMAGE_NAME" \
+              "API_IMAGE_NAME=$API_IMAGE_NAME" \
+              "IMAGE_TAG=$IMAGE_TAG" \
+              "NAVER_SEARCH_CLIENT_ID=$NAVER_SEARCH_CLIENT_ID" \
+              "NAVER_SEARCH_CLIENT_SECRET=$NAVER_SEARCH_CLIENT_SECRET" > "${{ secrets.DEPLOY_PATH }}/.env"
             cd "${{ secrets.DEPLOY_PATH }}"
             test -f nginx/default.conf
             docker compose -f "$COMPOSE_FILE" pull
