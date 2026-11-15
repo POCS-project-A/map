@@ -9,8 +9,26 @@ services:
     restart: unless-stopped
     ports:
       - "8081:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  api:
+    platform: linux/arm64
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${API_IMAGE_NAME:?API_IMAGE_NAME is required}:${IMAGE_TAG:-latest}
+    container_name: map-api
+    restart: unless-stopped
+    environment:
+      NAVER_SEARCH_CLIENT_ID: ${NAVER_SEARCH_CLIENT_ID:?검색 API Client ID가 필요합니다}
+      NAVER_SEARCH_CLIENT_SECRET: ${NAVER_SEARCH_CLIENT_SECRET:?검색 API Client Secret이 필요합니다}
+    expose:
+      - "8000"
