@@ -18,6 +18,12 @@ function useHash() {
   return hash;
 }
 
+// 주소의 job 값이 양의 정수일 때만 작업 번호로 쓴다 (예: ?job=abc는 무시)
+function jobParam(params: URLSearchParams) {
+  const n = Number(params.get("job"));
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export default function App() {
   const hash = useHash();
   const [path, query] = hash.split("?");
@@ -25,8 +31,8 @@ export default function App() {
   let page = <LibraryPage />;
   const trip = path.match(/^\/trips\/(\d+)$/);
   const shared = path.match(/^\/shared\/(\w+)$/);
-  if (trip) page = <TripPage key={trip[1]} tripId={+trip[1]} jobId={params.get("job") ? +params.get("job")! : null} />;
-  if (shared) page = <SharedPage token={shared[1]} />;
+  if (trip) page = <TripPage key={trip[1]} tripId={+trip[1]} jobId={jobParam(params)} />;
+  if (shared) page = <SharedPage key={shared[1]} token={shared[1]} />;
   return (
     <>
       {page}

@@ -31,9 +31,9 @@ function rebuildRoutes(day: TripDay, keepModes = new Map<string, TravelMode>()) 
     items.push(p);
     const next = places[idx + 1];
     if (!next) return;
-    const key = `${p.place.place_id}>${next.place.place_id}`;
+    const key = pairKey(p, next);
     const old = day.items.find((i): i is RouteItem => i.type === "route" && i.item_id === routeIdFor(day, p, next));
-    const mode = keepModes.get(key) ?? old?.mode ?? "car";
+    const mode = keepModes.get(key) ?? old?.mode ?? pairModes.get(key) ?? "car";
     const d = distanceM(p.place, next.place);
     items.push({
       item_id: old?.item_id ?? id(), type: "route", order: 0,
@@ -65,8 +65,16 @@ function retime(day: TripDay, dayStart: number, slots: number[] = []) {
     }
   }
 }
-const routeSlots = (day: TripDay) =>
-  day.items.filter((i) => i.type === "route").map((r) => toMin(r.end_time) - toMin(r.start_time));
+// 바꾸기 직전 그날 상태를 기억한다: 이동 칸 길이(여유 유지용)와 "장소 쌍 → 이동수단"(이동수단 유지용)
+const pairModes = new Map<string, TravelMode>();
+const pairKey = (a: PlaceItem, b: PlaceItem) => `${a.place.place_id}>${b.place.place_id}`;
+function routeSlots(day: TripDay) {
+  day.items.forEach((it, i) => {
+    const a = day.items[i - 1], b = day.items[i + 1];
+    if (it.type === "route" && a?.type === "place" && b?.type === "place") pairModes.set(pairKey(a, b), it.mode);
+  });
+  return day.items.filter((i) => i.type === "route").map((r) => toMin(r.end_time) - toMin(r.start_time));
+}
 const firstStart = (day: TripDay) => {
   const p = day.items.find((i) => i.type === "place");
   return p ? toMin(p.start_time) : 9 * 60;
@@ -135,6 +143,7 @@ function startJob(finish: (job: Job) => void): Job {
   const job: Job = { job_id: id(), status: "queued", step: null, result: null, error: null };
   const rec: JobRec = { job, started: Date.now(), finished: false, finish: () => finish(job) };
   jobs.set(job.job_id, rec);
+  setTimeout(() => tickJob(rec), 4100);
   return job;
 }
 function tickJob(rec: JobRec) {
@@ -287,22 +296,27 @@ const routes: [string, RegExp, Handler][] = [
     const t = findTrip(+m[1]); if (!t) return err(404, "여행이 없습니다");
     const found = findItem(t, +m[2]); if (!found) return err(404, "항목이 없습니다");
     const it = found.item;
+    const moving = it.type === "place" && (body?.day_no !== undefined || body?.after_item_id !== undefined);
+    const to = moving ? t.days.find((d) => d.day_no === (body.day_no ?? found.day.day_no)) : undefined;
+    const after: number | null = moving ? (body.after_item_id ?? null) : null;
+    if (moving) {
+      if (!to) return err(400, "그 일차가 없습니다");
+      if (after !== null && !to.items.some((i) => i.type === "place" && i.item_id === after && i !== it)) {
+        return err(400, "after_item_id가 그 날 장소가 아닙니다");
+      }
+    }
     if (body?.start_time) it.start_time = body.start_time;
     if (body?.end_time) it.end_time = body.end_time;
     if (it.type === "place" && body?.memo !== undefined) it.memo = body.memo;
     if (it.type === "route" && body?.mode) setMode(it, body.mode);
     // 위치 옮기기: day_no 또는 after_item_id가 오면 그 날, 그 장소 뒤로 옮긴다 (null이면 맨 앞)
-    if (it.type === "place" && (body?.day_no !== undefined || body?.after_item_id !== undefined)) {
-      const to = t.days.find((d) => d.day_no === (body.day_no ?? found.day.day_no));
-      if (!to) return err(400, "그 일차가 없습니다");
+    if (moving && to && it.type === "place") {
       const from = found.day;
       const fromStart = firstStart(from), fromSlots = routeSlots(from);
       const toStart = firstStart(to), toSlots = routeSlots(to);
       from.items = from.items.filter((i) => i.type === "place" && i !== it);
       const target = to.items.filter((i): i is PlaceItem => i.type === "place" && i !== it);
-      const after = body.after_item_id ?? null;
       const at = after === null ? 0 : target.findIndex((p) => p.item_id === after) + 1;
-      if (after !== null && at === 0) return err(400, "after_item_id가 그 날 장소가 아닙니다");
       target.splice(at, 0, it);
       to.items = target;
       if (from !== to) retime(from, fromStart, fromSlots);

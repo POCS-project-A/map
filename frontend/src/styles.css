@@ -170,3 +170,15 @@ input:not([type=checkbox]) { border: 1px solid #ddd; border-radius: 4px; padding
 .npin { width: 28px; height: 28px; border-radius: 50%; background: var(--ink-2); color: #fff; font: 700 13px/1 Inter, "Pretendard Variable", sans-serif; display: flex; align-items: center; justify-content: center; border: 2.5px solid #fff; box-shadow: 0 2px 6px #0003; }
 .npin.lodging { background: #391c57; }
 .map-tools { z-index: 5; }
+
+/* 오류 표시: 무엇이 / 왜 실패했는지 + 다시 시도 */
+.error-box { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; margin: 8px 0; border: 1px solid #e5484d55; background: #e5484d0d; border-radius: 10px; color: #b4232a; font-size: 13.5px; }
+.error-box b { font-size: 14px; }
+.error-box .btn { margin-top: 4px; }
+.action-error { display: flex; align-items: flex-start; gap: 8px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.action-error .error-box { flex: 1; }
+.col { display: flex; flex-direction: column; }
+.trip-card { position: relative; }
+.trip-link { display: flex; flex-direction: column; gap: 4px; color: inherit; text-decoration: none; }
+.trip-link:focus-visible, .route:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.title-input:disabled { background: transparent; color: var(--ink); opacity: .7; }

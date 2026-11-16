@@ -44,7 +44,10 @@ export default function MapView({ trip, dayNo, selectedRoute }: { trip: Trip; da
   const overlays = useRef<any[]>([]);
 
   const day = trip.days.find((d) => d.day_no === dayNo) ?? trip.days[0];
-  const places = (day?.items ?? []).filter((i): i is PlaceItem => i.type === "place").filter(hasCoord);
+  // 번호는 일정표와 같게 (좌표 없는 장소를 지도에서 빼도 번호는 그대로)
+  const allPlaces = (day?.items ?? []).filter((i): i is PlaceItem => i.type === "place");
+  const numOf = new Map(allPlaces.map((p, i) => [p.item_id, i + 1]));
+  const places = allPlaces.filter(hasCoord);
   const routes = (day?.items ?? []).filter((i): i is RouteItem => i.type === "route");
   const shown = routes.filter((r) => all || r.item_id === selectedRoute);
 
@@ -71,12 +74,12 @@ export default function MapView({ trip, dayNo, selectedRoute }: { trip: Trip; da
     overlays.current.forEach((o) => o.setMap(null));
     overlays.current = [];
     const bounds = new maps.LatLngBounds();
-    places.forEach((p, i) => {
+    places.forEach((p) => {
       const pos = new maps.LatLng(p.place.lat, p.place.lng);
       bounds.extend(pos);
       overlays.current.push(new maps.Marker({
         position: pos, map: map.current, title: `${p.place.name} ${p.start_time}`,
-        icon: { content: `<div class="npin${p.place.category === "숙소" ? " lodging" : ""}">${i + 1}</div>`, anchor: new maps.Point(14, 14) },
+        icon: { content: `<div class="npin${p.place.category === "숙소" ? " lodging" : ""}">${numOf.get(p.item_id)}</div>`, anchor: new maps.Point(14, 14) },
       }));
     });
     shown.forEach((r) => {
@@ -92,13 +95,13 @@ export default function MapView({ trip, dayNo, selectedRoute }: { trip: Trip; da
   return (
     <div className="map">
       <div className="map-tools">
-        <span className="pill">{day ? `${day.day_no}일차 · ${places.length}곳` : "일정 없음"}</span>
+        <span className="pill">{day ? `${day.day_no}일차 · ${allPlaces.length}곳${allPlaces.length > places.length ? ` (좌표 없음 ${allPlaces.length - places.length})` : ""}` : "일정 없음"}</span>
         <label className="pill"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> 전체 경로</label>
       </div>
       {mode === "naver" ? (
         // 네이버 지도는 지도 상자에 position: relative를 덮어쓰므로, 바깥 상자로 크기를 잡는다
         <div className="naver-map"><div ref={box} style={{ width: "100%", height: "100%" }} /></div>
-      ) : <FlatMap places={places} shown={shown} />}
+      ) : <FlatMap places={places} shown={shown} numOf={numOf} />}
       {mode !== "naver" && (
         <span className="map-note">
           {mode === "loading" ? "지도 불러오는 중…" : "네이버 지도를 쓸 수 없어 자리표시 지도로 보여 줍니다 (인증 실패 또는 연결 안 됨)"}
@@ -109,7 +112,7 @@ export default function MapView({ trip, dayNo, selectedRoute }: { trip: Trip; da
 }
 
 // 네이버 지도를 못 쓸 때: 위도·경도를 평면에 그대로 찍는다 (번호 마커 + 직선 경로)
-function FlatMap({ places, shown }: { places: PlaceItem[]; shown: RouteItem[] }) {
+function FlatMap({ places, shown, numOf }: { places: PlaceItem[]; shown: RouteItem[]; numOf: Map<number, number> }) {
   const pts = places.map((p) => p.place);
   const minLat = Math.min(...pts.map((p) => p.lat)), maxLat = Math.max(...pts.map((p) => p.lat));
   const minLng = Math.min(...pts.map((p) => p.lng)), maxLng = Math.max(...pts.map((p) => p.lng));
@@ -125,9 +128,9 @@ function FlatMap({ places, shown }: { places: PlaceItem[]; shown: RouteItem[] })
             points={r.path.map(([lng, lat]) => `${x(lng)},${y(lat)}`).join(" ")} />
         ))}
       </svg>
-      {places.map((p, i) => (
+      {places.map((p) => (
         <div key={p.item_id} className="pin" style={{ left: `${x(p.place.lng)}%`, top: `${y(p.place.lat)}%` }} title={`${p.place.name} ${p.start_time}`}>
-          {i + 1}
+          {numOf.get(p.item_id)}
         </div>
       ))}
     </>

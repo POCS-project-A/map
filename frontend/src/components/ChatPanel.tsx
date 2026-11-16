@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getTrip, listMessages, revertRevision, sendMessage } from "../api/endpoints";
 import type { Change, Message, Trip } from "../api/types";
 import { STEP_LABEL, useJob } from "../hooks/useJob";
+import ErrorBox from "./ErrorBox";
 
 // 오른쪽 AI 영역: 대화(11, 12) → 작업 대기(13) → 끝나면 이미 바뀐 일정을 다시 불러온다(3)
 export default function ChatPanel({ tripId, initialJob, onTripChange, onBusyChange, onChanges, onClose }: {
@@ -12,44 +13,57 @@ export default function ChatPanel({ tripId, initialJob, onTripChange, onBusyChan
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [jobId, setJobId] = useState<number | null>(initialJob);
-  const [error, setError] = useState("");
+  const [sending, setSending] = useState(false); // 전송 요청 중: 작업 번호를 받기 전까지 다시 보내지 못하게
+  const [error, setError] = useState<{ title: string; error: unknown; retry?: () => void } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { listMessages(tripId).then(setMessages).catch((e) => setError(e.message)); }, [tripId]);
+  async function loadMessages() {
+    try { setMessages(await listMessages(tripId)); }
+    catch (e) { setError({ title: "대화 기록을 불러오지 못했어요", error: e, retry: loadMessages }); }
+  }
+  useEffect(() => { loadMessages(); }, [tripId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, jobId]);
+  useEffect(() => { onBusyChange(jobId != null || sending); }, [jobId, sending]);
 
-  useEffect(() => { onBusyChange(jobId != null); }, [jobId]);
+  // AI 작업이 끝난 뒤: 바뀐 일정과 대화를 각각 다시 불러온다. 한쪽이 실패해도 다른 쪽은 진행하고, 다시 시도할 수 있다.
+  async function refreshTrip(changes: Change[]) {
+    try { onTripChange(await getTrip(tripId)); onChanges(changes); }
+    catch (e) { setError({ title: "바뀐 일정을 불러오지 못했어요", error: e, retry: () => refreshTrip(changes) }); }
+  }
 
   async function revert(m: Message) {
-    setError("");
+    setError(null);
     try {
       onTripChange(await revertRevision(tripId, m.revision_id!)); // 14
       onChanges([]);
-      setMessages(await listMessages(tripId));
-    } catch (e) { setError((e as Error).message); }
+      loadMessages();
+    } catch (e) { setError({ title: "되돌리지 못했어요", error: e }); }
   }
 
-  const job = useJob(jobId, async (j) => {
+  const job = useJob(jobId, (j) => {
     setJobId(null);
-    if (j.status === "failed") setError(j.error ?? "AI 작업이 실패했어요");
-    setMessages(await listMessages(tripId));
-    if (j.status === "done") {
-      onTripChange(await getTrip(tripId));
-      onChanges(j.result?.message?.changes ?? []);
-    }
+    if (j.status === "failed") setError({ title: "AI 작업이 실패했어요", error: new Error(j.error ?? "원인을 알 수 없어요") });
+    loadMessages();
+    if (j.status === "done") refreshTrip(j.result?.message?.changes ?? []);
   });
 
   async function send() {
     const t = text.trim();
-    if (!t || jobId) return;
-    setText(""); setError("");
+    if (!t || jobId || sending) return;
+    setSending(true); setError(null);
     try {
       const { job_id } = await sendMessage(tripId, t);
+      setText("");
       setJobId(job_id);
-      setMessages(await listMessages(tripId));
-    } catch (e) { setError((e as Error).message); }
+      loadMessages();
+    } catch (e) {
+      setError({ title: "메시지를 보내지 못했어요", error: e }); // 입력한 글은 지우지 않고 남겨 둔다
+    } finally {
+      setSending(false);
+    }
   }
 
+  const locked = !!jobId || sending;
   return (
     <aside className="panel chat">
       <div className="panel-head chat-head">
@@ -76,12 +90,12 @@ export default function ChatPanel({ tripId, initialJob, onTripChange, onBusyChan
         {job && job.status !== "done" && job.status !== "failed" && (
           <div className="msg assistant waiting">⏳ {job.step ? STEP_LABEL[job.step] : "대기 중"}…</div>
         )}
-        {error && <p className="error">{error}</p>}
+        {error && <ErrorBox title={error.title} error={error.error} onRetry={error.retry} />}
         <div ref={bottom} />
       </div>
       <form className="composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={jobId ? "AI가 작업 중이에요…" : "예: 경복궁 다음은 버스로 바꿔줘"} disabled={!!jobId} />
-        <button className="send" disabled={!!jobId || !text.trim()} aria-label="보내기">↑</button>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={locked ? "AI가 작업 중이에요…" : "예: 경복궁 다음은 버스로 바꿔줘"} disabled={locked} />
+        <button className="send" disabled={locked || !text.trim()} aria-label="보내기">↑</button>
       </form>
     </aside>
   );

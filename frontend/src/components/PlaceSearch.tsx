@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { searchPlaces } from "../api/endpoints";
 import type { Place } from "../api/types";
+import ErrorBox from "./ErrorBox";
 
 type Found = Omit<Place, "place_id">;
 
@@ -9,10 +10,18 @@ export default function PlaceSearch({ onPick, onCancel }: { onPick: (p: Found, s
   const [kw, setKw] = useState("");
   const [stay, setStay] = useState(60);
   const [result, setResult] = useState<Found[] | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const latest = useRef(0); // 빠르게 두 번 검색해도 마지막 검색 결과만 반영한다
+
   async function search() {
-    setError("");
-    try { setResult((await searchPlaces(kw)).places); } catch (e) { setError((e as Error).message); }
+    const id = ++latest.current;
+    setError(null);
+    try {
+      const { places } = await searchPlaces(kw);
+      if (id === latest.current) setResult(places);
+    } catch (e) {
+      if (id === latest.current) setError(e);
+    }
   }
   return (
     <div className="search-box">
@@ -24,7 +33,8 @@ export default function PlaceSearch({ onPick, onCancel }: { onPick: (p: Found, s
         <button className="btn">검색</button>
         <button type="button" className="btn-text" onClick={onCancel}>취소</button>
       </form>
-      {error && <p className="error">{error}</p>}
+      <ErrorBox title="장소를 검색하지 못했어요" error={error} onRetry={search} />
+      {result?.length === 0 && <p className="muted small">검색 결과가 없어요.</p>}
       {result?.map((p) => (
         <button key={p.name + p.address} className="search-result" onClick={() => onPick(p, stay)}>
           <b>{p.name}</b> <span className="muted small">{p.category} · {p.address}</span>

@@ -1,7 +1,8 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { addItem, deleteItem, updateItem } from "../api/endpoints";
 import type { Change, PlaceItem, RouteItem, Trip, TravelMode } from "../api/types";
 import { fmtMin, MODE_LABEL, slackMinutes, won } from "../lib/format";
+import ErrorBox from "./ErrorBox";
 import PlaceSearch from "./PlaceSearch";
 
 interface Props {
@@ -28,11 +29,15 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
     ));
   // 장소 추가 창 위치: 어느 날, 어느 장소 뒤 (after = null이면 그날 맨 앞)
   const [adding, setAdding] = useState<{ day: number; after: number | null } | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
 
-  async function run(p: Promise<Trip>) {
-    setError("");
-    try { onTripChange?.(await p); } catch (e) { setError((e as Error).message); }
+  // 편집 요청은 한 줄로 세워 순서대로 보낸다. (예: 이동수단을 빠르게 두 번 바꾸면 마지막 선택이 최종 결과)
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  function run(request: () => Promise<Trip>) {
+    setError(null);
+    queue.current = queue.current.then(async () => {
+      try { onTripChange?.(await request()); } catch (e) { setError(e); }
+    });
   }
 
   // 끌어서 옮기기: 같은 날이든 다른 날이든. 놓으면 "그 날, 그 장소 뒤"를 보낸다 (8번 PATCH)
@@ -40,7 +45,8 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
   const [over, setOver] = useState<number | string | null>(null); // 장소 번호, 또는 "end-{일차}"
   function moveTo(dayNo: number, after: number | null) {
     if (!drag) return;
-    run(updateItem(trip.trip_id, drag.id, { day_no: dayNo, after_item_id: after })); // 8
+    const id = drag.id;
+    run(() => updateItem(trip.trip_id, id, { day_no: dayNo, after_item_id: after })); // 8
   }
   function drop(dayNo: number, places: PlaceItem[], targetId: number) {
     if (!drag || drag.id === targetId) return;
@@ -57,14 +63,14 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
     return (
       <PlaceSearch
         onCancel={() => setAdding(null)}
-        onPick={(place, stay) => { setAdding(null); run(addItem(trip.trip_id, { day_no: dayNo, after_item_id: after, place, stay_minutes: stay })); }}
+        onPick={(place, stay) => { setAdding(null); run(() => addItem(trip.trip_id, { day_no: dayNo, after_item_id: after, place, stay_minutes: stay })); }}
       />
     );
   }
 
   return (
     <div className="timeline">
-      {error && <p className="error">{error}</p>}
+      <ErrorBox title="일정을 바꾸지 못했어요" error={error} />
       {changes.length > 0 && (
         <div className="changed-banner">
           ✦ AI가 {changes.length}곳을 바꿨어요. 아래 색으로 표시된 칸을 확인하세요 (초록 추가 · 파랑 변경 · 빨강 삭제).
@@ -80,6 +86,7 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
               <span className="muted small">{day.date}</span>
             </div>
             {day.items.length === 0 && <p className="muted small" style={{ padding: "4px 16px" }}>아직 장소가 없어요.</p>}
+            {places.length === 0 && removedAt(day.day_no, null, true)}
             {day.items.map((it) =>
               it.type === "place" ? (
                 <Fragment key={it.item_id}>
@@ -87,8 +94,8 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
                 <PlaceRow
                   item={it} change={changeOf(it.item_id)} num={places.indexOf(it) + 1} readOnly={readOnly}
                   onAddAfter={() => setAdding({ day: day.day_no, after: it.item_id })}
-                  onMemo={(memo) => run(updateItem(trip.trip_id, it.item_id, { memo }))} // 8
-                  onDelete={() => run(deleteItem(trip.trip_id, it.item_id))} // 9
+                  onMemo={(memo) => run(() => updateItem(trip.trip_id, it.item_id, { memo }))} // 8
+                  onDelete={() => run(() => deleteItem(trip.trip_id, it.item_id))} // 9
                   dragging={drag?.id === it.item_id}
                   over={over === it.item_id && drag?.id !== it.item_id}
                   onDragStart={() => setDrag({ day: day.day_no, id: it.item_id })}
@@ -103,7 +110,7 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
                 <RouteRow
                   key={it.item_id} item={it} readOnly={readOnly} selected={selectedRoute === it.item_id} change={changeOf(it.item_id)}
                   onSelect={() => onSelectRoute(day.day_no, selectedRoute === it.item_id ? null : it.item_id)}
-                  onMode={(mode) => run(updateItem(trip.trip_id, it.item_id, { mode }))} // 8
+                  onMode={(mode) => run(() => updateItem(trip.trip_id, it.item_id, { mode }))} // 8
                 />
               ),
             )}
@@ -135,6 +142,8 @@ function PlaceRow({ item, change, num, readOnly, onMemo, onDelete, onAddAfter, d
   onDragStart: () => void; onDragEnd: () => void; onDragOver: () => void; onDrop: () => void;
 }) {
   const [memo, setMemo] = useState(item.memo);
+  const [editing, setEditing] = useState(false); // 입력 중에는 서버 값으로 덮지 않는다
+  useEffect(() => { if (!editing) setMemo(item.memo); }, [item.memo, editing]);
   // 손잡이를 누를 때만 카드가 끌리게 한다 (메모 입력칸 글자 선택과 안 겹치게)
   const [armed, setArmed] = useState(false);
   return (
@@ -171,8 +180,9 @@ function PlaceRow({ item, change, num, readOnly, onMemo, onDelete, onAddAfter, d
         {readOnly ? (item.memo && <p className="memo">{item.memo}</p>) : (
           <input
             className="memo" value={memo} placeholder="메모 추가…"
+            onFocus={() => setEditing(true)}
             onChange={(e) => setMemo(e.target.value)}
-            onBlur={() => memo !== item.memo && onMemo(memo)}
+            onBlur={() => { setEditing(false); if (memo !== item.memo) onMemo(memo); }}
           />
         )}
       </div>
@@ -188,10 +198,14 @@ function RouteRow({ item, readOnly, selected, change, onSelect, onMode }: {
     <div className="item">
       <span className="time muted">{item.start_time}</span>
       <span />
-      <div className={`route ${selected ? "sel" : ""} ${change ? "changed" : ""}`} onClick={onSelect}>
+      <div
+        className={`route ${selected ? "sel" : ""} ${change ? "changed" : ""}`} onClick={onSelect}
+        role="button" tabIndex={0} aria-pressed={selected} aria-label={`${item.start_time} 이동 경로 지도에 ${selected ? "숨기기" : "표시"}`}
+        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(); } }}
+      >
         {change && <div className="change-tag">✦ AI 변경 <s>{change.before}</s> → <b>{change.after}</b></div>}
         {readOnly ? <span>{MODE_LABEL[item.mode]}</span> : (
-          <select value={item.mode} onClick={(e) => e.stopPropagation()} onChange={(e) => onMode(e.target.value as TravelMode)}>
+          <select value={item.mode} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onChange={(e) => onMode(e.target.value as TravelMode)}>
             {(Object.keys(MODE_LABEL) as TravelMode[]).map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
           </select>
         )}

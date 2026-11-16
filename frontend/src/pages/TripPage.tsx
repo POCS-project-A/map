@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { claimTrip, getTrip, updateTrip } from "../api/endpoints";
 import type { Change, Trip } from "../api/types";
 import ChatPanel from "../components/ChatPanel";
+import ErrorBox from "../components/ErrorBox";
 import CostPanel from "../components/CostPanel";
 import MapView from "../components/MapView";
 import Timeline from "../components/Timeline";
@@ -10,7 +11,9 @@ import { go } from "../lib/nav";
 // 일정 상세: 왼쪽(일정 또는 비용) | 가운데 지도(항상) | 오른쪽 AI(토글)
 export default function TripPage({ tripId, jobId }: { tripId: number; jobId: number | null }) {
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<{ title: string; error: unknown } | null>(null);
+  const [retry, setRetry] = useState(0);
   const [leftTab, setLeftTab] = useState<"plan" | "cost">("plan"); // 둘 중 하나만
   const [showAi, setShowAi] = useState(true);
   const [aiChanges, setAiChanges] = useState<Change[]>([]); // 마지막 AI 변경: 일정표에서 강조
@@ -21,17 +24,25 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    getTrip(tripId).then((t) => { setTrip(t); setTitle(t.title); }).catch((e) => setError(e.message)); // 3
-  }, [tripId]);
+    setError(null);
+    getTrip(tripId).then((t) => { setTrip(t); setTitle(t.title); }).catch(setError); // 3
+  }, [tripId, retry]);
 
-  if (error) return <p className="error" style={{ padding: 24 }}>{error} <button className="btn" onClick={() => go("/")}>라이브러리로</button></p>;
+  if (error) return (
+    <div style={{ padding: 24 }} className="col">
+      <ErrorBox title="여행을 불러오지 못했어요" error={error} onRetry={() => setRetry((n) => n + 1)} />
+      <button className="btn" style={{ alignSelf: "flex-start", marginTop: 8 }} onClick={() => go("/")}>라이브러리로</button>
+    </div>
+  );
   if (!trip) return <p className="muted" style={{ padding: 24 }}>불러오는 중…</p>;
 
   const cols = "minmax(380px, 30%) 1fr";
 
   async function saveTitle() {
     if (!trip || title === trip.title) return;
-    setTrip(await updateTrip(trip.trip_id, { title })); // 4
+    setActionError(null);
+    try { setTrip(await updateTrip(trip.trip_id, { title })); } // 4
+    catch (e) { setActionError({ title: "제목을 저장하지 못했어요 (입력란에서 다시 나가면 재시도)", error: e }); }
   }
   async function share() {
     const url = `${location.origin}${location.pathname}#/shared/${trip!.share_token}`;
@@ -39,8 +50,11 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
     setNotice(`공유 링크를 복사했어요: ${url}`);
   }
   async function claim() {
-    await claimTrip(trip!.trip_id); // 6
-    setNotice("(가짜 서버) 내 계정에 저장했어요. 실제로는 로그인 후 호출됩니다.");
+    setActionError(null);
+    try {
+      await claimTrip(trip!.trip_id); // 6
+      setNotice("내 계정에 저장했어요.");
+    } catch (e) { setActionError({ title: "내 계정에 저장하지 못했어요", error: e }); }
   }
 
   return (
@@ -53,13 +67,14 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
       </nav>
       <div className="trip-main">
         <header className="topbar">
-          <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
+          <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} disabled={aiBusy} title={aiBusy ? "AI 작업 중에는 바꿀 수 없어요" : "여행 제목"} />
           <span className="muted small">{trip.start_date ?? "날짜 미정"} · {trip.day_count}일</span>
           <span className="grow" />
           {notice && <span className="small notice">{notice}</span>}
           <button className="btn" onClick={share}>공유</button>
           <button className="btn" onClick={claim}>내 계정에 저장</button>
         </header>
+        {actionError && <div className="action-error"><ErrorBox title={actionError.title} error={actionError.error} /><button className="btn-text" onClick={() => setActionError(null)}>닫기</button></div>}
         <div className="trip-layout" style={{ gridTemplateColumns: cols || "1fr" }}>
           <aside className="panel">
               <div className="panel-head"><h2>{leftTab === "plan" ? "일정" : "비용"}</h2></div>
