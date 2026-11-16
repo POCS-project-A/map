@@ -16,7 +16,7 @@ export default function ChatPanel({ tripId, initialJob, track, onBusyChange, onC
   const [jobId, setJobId] = useState<number | null>(initialJob);
   const [sending, setSending] = useState(false); // 전송 요청 중: 작업 번호를 받기 전까지 다시 보내지 못하게
   // 대화 쪽 오류와 일정 쪽 오류를 따로 둔다 (한쪽 다시 시도 버튼이 다른 쪽 오류에 덮이지 않게)
-  type Err = { title: string; error: unknown; retry?: () => void } | null;
+  type Err = { title: string; error: unknown; retry?: () => void; fromLoad?: boolean } | null;
   const [chatError, setChatError] = useState<Err>(null);
   const [tripError, setTripError] = useState<Err>(null);
   const latestMessages = useRef(0); // 대화 목록도 가장 나중 요청의 응답만 반영
@@ -26,9 +26,10 @@ export default function ChatPanel({ tripId, initialJob, track, onBusyChange, onC
     const n = ++latestMessages.current;
     try {
       const list = await listMessages(tripId);
-      if (n === latestMessages.current) { setMessages(list); setChatError(null); }
+      // 불러오기에 성공하면 "불러오기 실패" 오류만 지운다 (AI 작업 실패 같은 다른 안내는 남긴다)
+      if (n === latestMessages.current) { setMessages(list); setChatError((prev) => (prev?.fromLoad ? null : prev)); }
     } catch (e) {
-      if (n === latestMessages.current) setChatError({ title: "대화 기록을 불러오지 못했어요", error: e, retry: loadMessages });
+      if (n === latestMessages.current) setChatError({ title: "대화 기록을 불러오지 못했어요", error: e, retry: loadMessages, fromLoad: true });
     }
   }
   useEffect(() => { loadMessages(); }, [tripId]);

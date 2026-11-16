@@ -16,13 +16,17 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
   const [retry, setRetry] = useState(0);
 
   // 일정을 바꾸는 요청(직접 편집, AI 결과 조회, 되돌리기, 제목 저장)은 모두 여기를 거친다.
-  // 늦게 도착한 옛 응답이 최신 화면을 덮지 않도록, 가장 나중에 보낸 요청의 결과만 반영한다.
-  // 반환값: 반영했으면 true, 더 새 요청이 있어 버렸으면 false
-  const seq = useRef(0);
+  // 요청마다 보낸 순서대로 번호를 붙이고, 지금 화면에 반영된 것보다 나중에 보낸 요청의 결과만 반영한다.
+  // - 늦게 도착한 옛 응답은 버린다 (예: 되돌리기 뒤에 도착한 AI 결과 조회 응답)
+  // - 뒤에 보낸 요청이 실패해도, 앞서 성공한 결과(예: 되돌리기)는 반영된다
+  // 반환값: 반영했으면 true, 이미 더 새 결과가 반영돼 있어 버렸으면 false
+  const sent = useRef(0);
+  const shown = useRef(0);
   async function track(request: Promise<Trip>): Promise<boolean> {
-    const n = ++seq.current;
+    const n = ++sent.current;
     const t = await request;
-    if (n !== seq.current) return false;
+    if (n < shown.current) return false;
+    shown.current = n;
     setTrip(t);
     return true;
   }
