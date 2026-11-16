@@ -10,6 +10,7 @@ export default function SharedPage({ token }: { token: string }) {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [day, setDay] = useState(1);
+  const [route, setRoute] = useState<number | null>(null);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
@@ -26,9 +27,9 @@ export default function SharedPage({ token }: { token: string }) {
     <div className="trip-layout" style={{ gridTemplateColumns: "420px 1fr", height: "100%" }}>
       <aside className="panel">
         <div className="panel-head"><div><span className="muted small">공유받은 일정 · 읽기 전용</span><h2>{trip.title}</h2></div></div>
-        <div className="panel-body"><Timeline trip={trip} readOnly selectedRoute={null} onSelectRoute={() => {}} onDayFocus={setDay} /></div>
+        <div className="panel-body"><Timeline trip={trip} readOnly selectedRoute={route} onSelectRoute={(d, id) => { setDay(d); setRoute(id); }} onDayFocus={setDay} /></div>
       </aside>
-      <div className="map-area"><MapView trip={trip} dayNo={day} selectedRoute={null} /></div>
+      <div className="map-area"><MapView trip={trip} dayNo={day} selectedRoute={route} /></div>
     </div>
   );
 }

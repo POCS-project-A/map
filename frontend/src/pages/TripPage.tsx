@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { claimTrip, getTrip, updateTrip } from "../api/endpoints";
 import type { Change, Trip } from "../api/types";
 import ChatPanel from "../components/ChatPanel";
@@ -14,6 +14,18 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<{ title: string; error: unknown } | null>(null);
   const [retry, setRetry] = useState(0);
+
+  // 일정을 바꾸는 요청(직접 편집, AI 결과 조회, 되돌리기, 제목 저장)은 모두 여기를 거친다.
+  // 늦게 도착한 옛 응답이 최신 화면을 덮지 않도록, 가장 나중에 보낸 요청의 결과만 반영한다.
+  // 반환값: 반영했으면 true, 더 새 요청이 있어 버렸으면 false
+  const seq = useRef(0);
+  async function track(request: Promise<Trip>): Promise<boolean> {
+    const n = ++seq.current;
+    const t = await request;
+    if (n !== seq.current) return false;
+    setTrip(t);
+    return true;
+  }
   const [leftTab, setLeftTab] = useState<"plan" | "cost">("plan"); // 둘 중 하나만
   const [showAi, setShowAi] = useState(true);
   const [aiChanges, setAiChanges] = useState<Change[]>([]); // 마지막 AI 변경: 일정표에서 강조
@@ -41,7 +53,7 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
   async function saveTitle() {
     if (!trip || title === trip.title) return;
     setActionError(null);
-    try { setTrip(await updateTrip(trip.trip_id, { title })); } // 4
+    try { await track(updateTrip(trip.trip_id, { title })); } // 4
     catch (e) { setActionError({ title: "제목을 저장하지 못했어요 (입력란에서 다시 나가면 재시도)", error: e }); }
   }
   async function share() {
@@ -84,7 +96,7 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
                   <Timeline
                     trip={trip} readOnly={aiBusy} selectedRoute={route} onDayFocus={setDayNo}
                     changes={aiChanges} onDismissChanges={() => setAiChanges([])}
-                    onTripChange={(t) => { setTrip(t); setAiChanges([]); }}
+                    track={track} onEdited={() => setAiChanges([])}
                     onSelectRoute={(d, id) => { setDayNo(d); setRoute(id); }}
                   />
                 ) : <CostPanel trip={trip} />}
@@ -94,7 +106,7 @@ export default function TripPage({ tripId, jobId }: { tripId: number; jobId: num
             <MapView trip={trip} dayNo={dayNo} selectedRoute={route} />
             <div className="chatbot" hidden={!showAi}>
               <ChatPanel
-                tripId={trip.trip_id} initialJob={jobId} onTripChange={setTrip} onBusyChange={setAiBusy}
+                tripId={trip.trip_id} initialJob={jobId} track={track} onBusyChange={setAiBusy}
                 onChanges={setAiChanges} onClose={() => setShowAi(false)}
               />
             </div>

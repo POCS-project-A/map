@@ -11,12 +11,13 @@ interface Props {
   selectedRoute: number | null;
   onSelectRoute: (dayNo: number, itemId: number | null) => void;
   onDayFocus: (dayNo: number) => void;
-  onTripChange?: (trip: Trip) => void;
+  track?: (request: Promise<Trip>) => Promise<boolean>; // 결과 반영 (가장 나중 요청만)
+  onEdited?: () => void;
   changes?: Change[]; // AI가 방금 바꾼 칸 → 강조 + "이전 → 이후" 표시
   onDismissChanges?: () => void;
 }
 
-export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute, onDayFocus, onTripChange, changes = [], onDismissChanges }: Props) {
+export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute, onDayFocus, track, onEdited, changes = [], onDismissChanges }: Props) {
   const changeOf = (id: number) => changes.find((c) => c.item_id === id);
   // AI가 뺀 장소: 원래 있던 자리(after_item_id 뒤)에 빨간 취소선으로 남겨 보여 준다
   const removedAt = (dayNo: number, after: number | null, show: boolean) =>
@@ -36,7 +37,7 @@ export default function Timeline({ trip, readOnly, selectedRoute, onSelectRoute,
   function run(request: () => Promise<Trip>) {
     setError(null);
     queue.current = queue.current.then(async () => {
-      try { onTripChange?.(await request()); } catch (e) { setError(e); }
+      try { if (track && await track(request())) onEdited?.(); } catch (e) { setError(e); }
     });
   }
 
@@ -143,7 +144,9 @@ function PlaceRow({ item, change, num, readOnly, onMemo, onDelete, onAddAfter, d
 }) {
   const [memo, setMemo] = useState(item.memo);
   const [editing, setEditing] = useState(false); // 입력 중에는 서버 값으로 덮지 않는다
-  useEffect(() => { if (!editing) setMemo(item.memo); }, [item.memo, editing]);
+  // 서버 값이 바뀔 때만 입력란을 맞춘다. (입력란에서 나간 직후 저장 응답 전에 옛 값으로 돌아가지 않게)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!editing) setMemo(item.memo); }, [item.memo]);
   // 손잡이를 누를 때만 카드가 끌리게 한다 (메모 입력칸 글자 선택과 안 겹치게)
   const [armed, setArmed] = useState(false);
   return (

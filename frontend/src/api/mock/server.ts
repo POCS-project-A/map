@@ -67,7 +67,8 @@ function retime(day: TripDay, dayStart: number, slots: number[] = []) {
 }
 // 바꾸기 직전 그날 상태를 기억한다: 이동 칸 길이(여유 유지용)와 "장소 쌍 → 이동수단"(이동수단 유지용)
 const pairModes = new Map<string, TravelMode>();
-const pairKey = (a: PlaceItem, b: PlaceItem) => `${a.place.place_id}>${b.place.place_id}`;
+// 일정 항목 번호(item_id)는 여행마다 따로 만들어지므로, 같은 장소를 쓰는 다른 여행과 섞이지 않는다
+const pairKey = (a: PlaceItem, b: PlaceItem) => `${a.item_id}>${b.item_id}`;
 function routeSlots(day: TripDay) {
   day.items.forEach((it, i) => {
     const a = day.items[i - 1], b = day.items[i + 1];
@@ -247,6 +248,7 @@ const routes: [string, RegExp, Handler][] = [
     let job_id: number | null = null;
     if (body?.prompt) {
       messages.get(trip.trip_id)!.push({ message_id: id(), role: "user", text: body.prompt, created_at: new Date().toISOString() });
+      busyTrips.add(trip.trip_id); // 일정을 만드는 동안 직접 편집 막기
       const job = startJob((j) => {
         // 생성 완료: 샘플 장소 3곳으로 1일차를 채운다
         trip.days[0].items = [
@@ -258,6 +260,7 @@ const routes: [string, RegExp, Handler][] = [
         const msg: Message = { message_id: id(), role: "assistant", text: "(가짜 서버) 일정 초안을 만들었어요.", created_at: new Date().toISOString() };
         messages.get(trip.trip_id)!.push(msg);
         j.result = { message: msg, trip_id: trip.trip_id };
+        busyTrips.delete(trip.trip_id);
       });
       job_id = job.job_id;
     }
@@ -345,7 +348,8 @@ const routes: [string, RegExp, Handler][] = [
     const result = (found.length ? found : pool.slice(0, 3)).map(({ place_id: _id, ...rest }) => rest);
     return ok({ places: result });
   }],
-  ["GET", /^\/trips\/(\d+)\/messages$/, (m) => ok(messages.get(+m[1]) ?? [])],
+  // 진짜 서버처럼 매번 새 JSON을 돌려준다 (같은 배열을 주면 화면이 바뀐 줄 모름)
+  ["GET", /^\/trips\/(\d+)\/messages$/, (m) => ok(clone(messages.get(+m[1]) ?? []))],
   ["POST", /^\/trips\/(\d+)\/messages$/, (m, body) => {
     const t = findTrip(+m[1]); if (!t) return err(404, "여행이 없습니다");
     const text = String(body?.text ?? "").trim(); if (!text) return err(400, "내용을 입력해 주세요");
